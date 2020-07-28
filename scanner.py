@@ -5,204 +5,143 @@ import argparse
 import time
 import pandas as pd
 
-# Disable Warning when not verifying SSL certs.
-requests.packages.urllib3.disable_warnings()
+class ConnectionManager:
+    """Connects to Nessus."""
 
-def build_url(resource):
-    return '{0}{1}'.format(url, resource)
+    def __init__(self, username, password, host="https://localhost:8834", 
+                 verify=False, *args, **kwargs):
+        """Initiate connecion to Nessus Backend.
+        Requires login credentials.
+        """
+        self.host = host  # Location of the nessus server
+        # Nessus user account
+        self.username = username
+        self.password = password
 
-def connect(method, resource, data=None, params=None, token=''):
-    """
-    Send a request
+        # Check/do not check SSL
+        self.verify = verify
+        # Disable Warning when not verifying SSL certs.
+        if not verify:
+            requests.packages.urllib3.disable_warnings()
 
-    Send a request to Nessus based on the specified data. If the session token
-    is available add it to the request. Specify the content type as JSON and
-    convert the data to JSON format.
-    """
-    headers = {'X-Cookie': 'token={0}'.format(token),
-               'content-type': 'application/json'}
+        # Login to get a session token
+        self.token = ''  # needed for the login
+        self.token = self.login()
 
-    data = json.dumps(data)
+        # Cache all scans saved on nessus
+        self.scans = self.list_scans()
 
-    if method == 'POST':
-        r = requests.post(build_url(resource), data=data, headers=headers, verify=verify)
-    elif method == 'PUT':
-        r = requests.put(build_url(resource), data=data, headers=headers, verify=verify)
-    elif method == 'DELETE':
-        r = requests.delete(build_url(resource), data=data, headers=headers, verify=verify)
-    else:
-        r = requests.get(build_url(resource), params=params, headers=headers, verify=verify)
+    def connect(self, method, resource, data=None, params=None):
+        """Send a http request to the nessus backend.
 
-    # Exit if there is an error.
-    if r.status_code != 200:
-        e = r.json()
-        print (e['error'])
-        sys.exit()
+        The stored token is used for authentication, provided data is
+        converted to json and attached to the request.
+        Returns the data in the response.
+        Raises a RuntimeError if the response code signals failure.
+        """
+        # construct the URL
+        url = self.host + resource
 
-    # When downloading a scan we need the raw contents not the JSON data.
-    if 'download' in resource:
-        return r.content
+        # Write the auth token (if any) into the header
+        headers = {'X-Cookie': f'token={self.token}',
+                   'content-type': 'application/json'}
 
-    # All other responses should be JSON data. Return raw content if they are
-    # not.
-    try:
-        return r.json()
-    except ValueError:
-        return r.content
+        data = json.dumps(data)
 
 
-def login(usr, pwd):
-    # Login to Nessus.
+        if method == 'POST' :
+            response = requests.post(url, headers=headers, verify=self.verify, data=data)
+        elif method == 'PUT':
+            response = requests.put(url, headers=headers, verify=self.verify, data=data)
+        elif method == 'DELETE':
+            response = requests.delete(url, headers=headers, verify=self.verify, data=data)
+        elif method == 'GET':
+            response = requests.get(url, headers=headers, verify=self.verify, params=params)
+        else:
+            raise RuntimeError(f'Unsupported HTTP method: {method}')
 
-    login = {'username': usr, 'password': pwd}
-    data = connect('POST', '/session', data=login)
-    return data['token']
+        # Exit if there is an error.
+        if response.status_code != 200:
+            error = response.json()
+            message = f'HTTP request returned status {response.status_code}: {error["error"]}'
+            raise RuntimeError(message)
 
+        # When downloading a scan we need the raw contents not the JSON data.
+        if 'download' in resource:
+            return response.content
 
-def get_policies():
-    """Get scan policies. """
-    data = connect('GET', '/editor/policy/templates')
-    policy_df = pd.DataFrame(data['templates'])
-    return policy_df
+        # All other responses should be JSON data. Return raw content otherwise.
+        try:
+            return response.json()
+        except ValueError:
+            return response.content
 
+    def login(self):
+        """Authenticate against Nessus backend.
+        Save token for future connections.
+        """
+        login = {'username': self.username, 'password': self.password}
+        r = self.connect(method='POST', resource='/session', data=login)
+        return r['token']
 
-def get_scans(token):
-    """List scans with their IDs. 
-    
-    Returns a panads DataFrame.
-    """
+    def logout(self):
+        """Logout of Nessus."""
+        response = self.connect(method='DELETE', resource='/session')
+        print(response)
+        return 'Logged Out'
 
-    status_dict = {}
-    name_dict = {}
-    data = connect('GET', '/scans/', token=token)
-    scan_df = pd.DataFrame(data['scans'])
-    scan_df = scan_df[['id', 'name', 'creation_date', 'status']]
+    def list_scans(self):
+        """List scans with their IDs. 
+        
+        Returns a panads DataFrame.
+        """
+        data = self.connect(method='GET', resource='/scans/')
+        scan_df = pd.DataFrame(data['scans'])
+        scan_df = scan_df[['id', 'name', 'creation_date', 'status']]
+        return scan_df
 
-    return scan_df
+    def export_scan(self, scan_id):
+        """Export a scan from the backend to an xml string."""
 
+        # Check if Scan ID exists
+        print(self.scans['id'])
+        if scan_id not in self.scans['id'].unique():
+            raise RuntimeError(f"ID {scan_id} not in scans.")
 
-def get_history_ids(sid):
-    """Get history ids
+        # First, we need to request an export from nessus
+        data = {'format': 'nessus'}
+        response = self.connect(method='POST', resource=f'/scans/{scan_id}/export', data=data)
+        file_id = response['file']
 
-    Create a dictionary of scan uuids and history ids so we can lookup the
-    history id by uuid. 
-    """
-    data = connect('GET', '/scans/{0}'.format(sid))
-    temp_hist_dict = dict((h['history_id'], h['status']) for h in data['history'])
-    temp_hist_dict_rev = {a:b for b,a in temp_hist_dict.items()}
-    try:
-        for key,value in temp_hist_dict_rev.items():
-            print (key)
-            print (value)
-    except:
-        pass
-    #return dict((h['uuid'], h['history_id']) for h in data['history'])
+        # Wait for nessus to finish exporting the scan
+        export_status_route = f'/scans/{scan_id}/export/{file_id}/status'
+        max_wait = 60  # seconds
+        for seconds in range(max_wait):
+            time.sleep(1)
+            response = self.connect(method='GET', resource=export_status_route)
+            status = response['status']
+            print(status)
+            if status != 'loading':
+                break
 
-
-def get_scan_history(sid, hid):
-    """Scan history details
-
-    Get the details of a particular run of a scan.
-    """
-    params = {'history_id': hid}
-    data = connect('GET', '/scans/{0}'.format(sid), params)
-    return data['info']
-
-
-def get_status(sid):
-    """Get the status of a scan by the sid."""
-
-    time.sleep(3) # sleep to allow nessus to process the previous status change
-    scan_df = get_scans()
-    # TODO: extract the correct status
-
-
-def launch(sid):
-    # Launch the scan specified by the sid.
-
-    data = connect('POST', '/scans/{0}/launch'.format(sid))
-    return data['scan_uuid']
-
-def pause(sid):
-    # Pause the scan specified by the sid.
-    connect('POST', '/scans/{0}/pause'.format(sid))
-    return
-
-def resume(sid):
-    # Resume the scan specified by the sid.
-    connect('POST', '/scans/{0}/resume'.format(sid))
-    return
-
-def stop(sid):
-    # Resume the scan specified by the sid.
-    connect('POST', '/scans/{0}/stop'.format(sid))
-    return
-
-def logout():
-    # Logout of Nessus.
-    print('Logging Out...')
-    connect('DELETE', '/session')
-    print('Logged Out')
-    exit()
-
-
-def generate_api_key(token):
-    headers = {'X-Cookie': 'token={0}'.format(token),
-               'content-type': 'application/json'}
-
-    data = json.dumps(None)
-
-    r = requests.put('https://localhost:8834/session/keys', data=data, headers=headers, verify=verify)
-
-    print(r.json())
-
-
-def export_scan(scan_id, token):
-
-    data = {'format': 'nessus'}
-    response = connect('POST', f'/scans/{scan_id}/export', data=data, token=token)
-    file_id = response['file']
-
-    export_status_route = f'/scans/{scan_id}/export/{file_id}/status'
-    # Wait for nessus to finish exporting the scan
-    max_wait = 60  # seconds
-    for seconds in range(max_wait):
-        time.sleep(1)
-        response = connect('GET', export_status_route, token=token)
-        status = response['status']
-        print(status)
-        if status != 'loading':
-            break
-
-    download_route = f'/scans/{scan_id}/export/{file_id}/download'
-    scan_xml = connect('GET', download_route, token=token)
-    return scan_xml
+        # When the export has finished loading, download the xml file
+        download_route = f'/scans/{scan_id}/export/{file_id}/download'
+        scan_xml = self.connect(method='GET', resource=download_route)
+        return scan_xml
 
 
 if __name__ == '__main__':
 
+    # Read login parameters (host, username, password)
+    # e.g., (localhost:8834, testusr, pw)
     with open('config.json', 'r') as infile:
         config = json.load(infile)
 
-    url = config['url']
-    verify = config['verify']
-    token = config['token']
-    username = config['username']
-    password = config['password']
+    # Communicate with the backend via the connection manager
+    nessus = ConnectionManager(**config)
+    scans = nessus.list_scans()
+    xml = nessus.export_scan(8)
+    print(xml[0:1000])
+    print(nessus.logout())
 
-    print('Logging in...')
-    try:
-        token = login(username, password)
-    except: 
-        raise RuntimeError('Unable to login.')
-    print('Login successful.\n\n')
-    
-    scans_df = get_scans(token)
-    print(scans_df)
-
-    scan_xml = export_scan(scan_id=8, token=token)
-
-    print(scan_xml[0:100])
-    
     print('Done')
-
