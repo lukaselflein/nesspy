@@ -52,9 +52,9 @@ Export a .csv file
 Under active development, limited functionality.
 
 # Dependencies
-Nessus 8.x
-Python 3.x
-packages from requirements.txt
+* Nessus (tested with 8.11.0)
+* Python 3.x
+* packages from requirements.txt
 
 # Contributions
 This package builds on previous work:
