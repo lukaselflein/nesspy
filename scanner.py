@@ -190,8 +190,6 @@ if __name__ == '__main__':
     username = config['username']
     password = config['password']
 
-    print(username, password)
-
     print('Logging in...')
     try:
         token = login(username, password)
