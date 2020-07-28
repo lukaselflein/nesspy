@@ -104,7 +104,6 @@ class ConnectionManager:
         """Export a scan from the backend to an xml string."""
 
         # Check if Scan ID exists
-        print(self.scans['id'])
         if scan_id not in self.scans['id'].unique():
             raise RuntimeError(f"ID {scan_id} not in scans.")
 
@@ -140,8 +139,9 @@ if __name__ == '__main__':
     # Communicate with the backend via the connection manager
     nessus = ConnectionManager(**config)
     scans = nessus.list_scans()
+    print(scans)
     xml = nessus.export_scan(8)
-    print(xml[0:1000])
+    print(xml[0:200])
     print(nessus.logout())
 
     print('Done')
