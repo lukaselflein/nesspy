@@ -30,7 +30,9 @@ Export a .nessus/xml file
     xml_string = nessus.export_scan(8)
     print(xml_string)
 ```
+``` xml
 <?xml version="1.0" ?>\n<NessusClientData_v2>\n<Policy><policyName>Basic Network Scan</policyName>\n<Preferences><ServerPreferences><preference><name>scan.enable_utf8_output</name>\n<value>no</value>\n</pr
+```
 
 Export a .csv file
 ``` python
