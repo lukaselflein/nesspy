@@ -3,7 +3,7 @@ Automated Nessus vulnerability scanning
 
 # Overview
 Since Nessus 6, automation of the Nessus scanner is very limited.
-This project uses the limited capabilities of the shipped API to build an automated workflow for vulnerabilitd management.
+This project uses the limited capabilities of the shipped API to build an automated workflow for vulnerability management.
 
 # Setup
 1. Install & run the Nessus Scanner on your local machine.
