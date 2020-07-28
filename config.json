@@ -1,5 +1,5 @@
 {
-    "url": "https://localhost:8834",
+    "host": "https://localhost:8834",
     "username": "replace_with_your_nessus_username",
     "password": "replace_with_your_nessus_password",
     "verify": false,
