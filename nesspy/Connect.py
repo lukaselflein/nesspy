@@ -129,6 +129,17 @@ class ConnectionManager:
         scan_xml = self.connect(method='GET', resource=download_route)
         return scan_xml
 
+    def export_latest(self):
+        """Return a xml-string representation of the most recent scan."""
+        # Search for the latest scan in the metadata
+        latest_timestamp = self.scans.creation_date.max()
+        latest_row = self.scans.loc[self.scans.creation_date == latest_timestamp] 
+        latest_id = latest_row.id.values[0]
+        # Get the scan corresponding to the ID from the metadat
+        latest_scan_xml = self.export_scan(scan_id=latest_id)
+
+        return latest_scan_xml
+
 
 if __name__ == '__main__':
 

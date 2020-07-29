@@ -17,11 +17,12 @@ scans = nessus.list_scans()
 #print(scans)
 
 # Show the xml of a scan
-xml_string = nessus.export_scan(8)
-#print(xml[0:200])
+example_xml_string = nessus.export_scan(8)
+# Show the xml of the latest scan
+xml_string = nessus.export_latest()
 
 # Parse the scan
-scan = Scan(xml_string)
+scan = Scan(xml_string=xml_string)
 # Access the scan as a pandas DataFrame
 df = scan.df
 # Export the scan as a .csv table
