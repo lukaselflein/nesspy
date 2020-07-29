@@ -1,6 +1,7 @@
 import json
 
 from nesspy.Connect import ConnectionManager
+from nesspy.Parser import Scan, Host, Finding
 
 
 # Read login parameters (host, username, password)
@@ -13,15 +14,19 @@ nessus = ConnectionManager(**config)
 
 # Show the scans saved in the backend
 scans = nessus.list_scans()
-print(scans)
+#print(scans)
 
 # Show the xml of a scan
-xml = nessus.export_scan(8)
-print(xml[0:200])
+xml_string = nessus.export_scan(8)
+#print(xml[0:200])
 
-# Export a scan as a csv file
-#
+# Parse the scan
+scan = Scan(xml_string)
+# Access the scan as a pandas DataFrame
+df = scan.df
+# Export the scan as a .csv table
+scan.to_csv(path="./example.csv")
 
 # Logout
 nessus.logout()
-print('Done')
+print('Example script is done.')

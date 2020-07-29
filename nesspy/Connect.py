@@ -48,7 +48,6 @@ class ConnectionManager:
 
         data = json.dumps(data)
 
-
         if method == 'POST' :
             response = requests.post(url, headers=headers, verify=self.verify, data=data)
         elif method == 'PUT':
@@ -87,7 +86,6 @@ class ConnectionManager:
     def logout(self):
         """Logout of Nessus."""
         response = self.connect(method='DELETE', resource='/session')
-        print(response)
         return 'Logged Out'
 
     def list_scans(self):
@@ -115,13 +113,16 @@ class ConnectionManager:
         # Wait for nessus to finish exporting the scan
         export_status_route = f'/scans/{scan_id}/export/{file_id}/status'
         max_wait = 60  # seconds
+        print('Waiting for nessus export ...')
         for seconds in range(max_wait):
-            time.sleep(1)
             response = self.connect(method='GET', resource=export_status_route)
             status = response['status']
-            print(status)
+
             if status != 'loading':
+                print(f'{status} ({seconds} s)')
                 break
+            print(f'{status}  ', end="\r")
+            time.sleep(1)
 
         # When the export has finished loading, download the xml file
         download_route = f'/scans/{scan_id}/export/{file_id}/download'
