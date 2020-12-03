@@ -15,7 +15,7 @@ Set up a connection to the nessus backend by providing your login credentials in
         config = json.load(infile)
     nessus = ConnectionManager(**config)
 ```
-List all scans saved in the backedn
+List all scans saved in the backend
 ``` python
     scans = nessus.list_scans()
     print(scans)
