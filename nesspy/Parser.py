@@ -1,6 +1,6 @@
 import ipaddress
-import pandas as pd
 import datetime
+import csv
 
 from lxml import etree as elmtree
 
@@ -15,7 +15,6 @@ class Scan:
     def __init__(self, xml_string=None, xml_file_path=None):
         """Set up a new scan, process xml input."""
         self.hosts = []
-        self.df = None
 
         # Handle xml input
         if xml_string is not None:
@@ -29,8 +28,8 @@ class Scan:
                 raise ValueError('Empty Scan initiated.')
 
         self.parse_xml()
+        self.header_list = None
         self.findings = self.hosts_to_table()
-        self.df = self.table_to_df()
 
     def parse_xml(self):
         """Read xml structure, convert into hosts/findings."""
@@ -64,7 +63,7 @@ class Scan:
                 elif element.tag == 'ReportItem':
                     finding = handle_finding(element)
                     if finding is not None:
-                        # TODO: this is not secure, report could be about other host
+                        # TODO: this is not safe, report could be about other host
                         finding.scan_date = datetime.datetime.fromtimestamp(int(scan_time.text))
 
                         host.findings.add(finding)
@@ -79,33 +78,32 @@ class Scan:
         for host in hosts:
             host_table += [[host.dns, host.ip]]
             for finding in list(host.findings):
-                finding_table += [[host.ip, host.dns, 
-                                   finding.cve, finding.cvss, 
+                finding_table += [[finding.scan_date,
+                                   host.ip, 
+                                   host.dns,
+                                   finding.cve, 
+                                   finding.cvss, 
                                    finding.exploit,
                                    finding.plugin_name, 
                                    finding.plugin_mod_date,
-                                   finding.scan_date
                                   ]]
 
         self.host_table = host_table
         self.finding_table = finding_table
+        self.header_list = ['scan_date', 'ip', 'dns', 'cve', 'cvss', 
+                       'exploit', 'plugin_name', 'plugin_mod_date']
 
         return finding_table
 
-    def table_to_df(self):
-        """Convert python list-based table to a pandas.DataFrame (with hardcoded columnnames)."""
-        finding_table = self.finding_table
-        finding_df = pd.DataFrame(data=finding_table, 
-                                  columns=['src_ip', 'src_dns', 
-                                           'cve', 'cvss', 'exploit',
-                                           'plugin_name', 'plugin_mod_date',
-                                           'scan_date'])
-
-        return finding_df
-
     def to_csv(self, path, *args, **kwargs):
         """Export the DataFrame to a .csv file"""
-        self.df.to_csv(path, index=False, *args, **kwargs)
+        with open(path, 'w', newline='') as csvfile:
+            exporter = csv.writer(csvfile, delimiter=',',
+                                  quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            # Write 
+            exporter.writerow(self.header_list)
+            for row in self.finding_table:
+                exporter.writerow(row)
 
 
 class Host():
@@ -153,14 +151,17 @@ class Finding():
         self.scan_date = scan_date
 
 
+def handle_finding(element, exclude_info=False):
+    """Iterate through xml tags and write interesting tags to finding object."""
 
-
-def handle_finding(element):
-    # Exclude informational notices (open ports etc)
-    if False:
+    # Set to True to exclude informational notices (open ports etc)
+    if exclude_info:
         if int(element.attrib['severity']) == 0:
             return None
+
+    # Create a new finding object
     finding = Finding()
+    # Write interesting tags into finding object
     for child in element:
         if child.tag == 'description':
             finding.description = child.text

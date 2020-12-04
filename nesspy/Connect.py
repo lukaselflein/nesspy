@@ -3,7 +3,6 @@ import json
 import sys
 import argparse
 import time
-import pandas as pd
 
 class ConnectionManager:
     """Connects to Nessus."""
@@ -29,7 +28,7 @@ class ConnectionManager:
         self.token = self.login()
 
         # Cache all scans saved on nessus
-        self.scans = self.list_scans()
+        self.scan_list = self.list_scans()
 
     def connect(self, method, resource, data=None, params=None):
         """Send a http request to the nessus backend.
@@ -93,16 +92,17 @@ class ConnectionManager:
         
         Returns a panads DataFrame.
         """
+        scan_list = []
         data = self.connect(method='GET', resource='/scans/')
-        scan_df = pd.DataFrame(data['scans'])
-        scan_df = scan_df[['id', 'name', 'creation_date', 'status']]
-        return scan_df
+        for scan in data['scans']:
+            scan_list.append([scan['id'], scan['name'], scan['creation_date'], scan['status']])
+        return scan_list
 
     def export_scan(self, scan_id):
         """Export a scan from the backend to an xml string."""
 
         # Check if Scan ID exists
-        if scan_id not in self.scans['id'].unique():
+        if scan_id not in [line[0] for line in self.scan_list]:
             raise RuntimeError(f"ID {scan_id} not in scans.")
 
         # First, we need to request an export from nessus
@@ -132,11 +132,10 @@ class ConnectionManager:
     def export_latest(self):
         """Return a xml-string representation of the most recent scan."""
         # Search for the latest scan in the metadata
-        latest_timestamp = self.scans.creation_date.max()
-        latest_row = self.scans.loc[self.scans.creation_date == latest_timestamp] 
-        latest_id = latest_row.id.values[0]
+        latest_timestamp = max([line[2] for line in self.scan_list])
+        latest_scan_id = [line[0] for line in self.scan_list if line[2] >= latest_timestamp][0]
         # Get the scan corresponding to the ID from the metadat
-        latest_scan_xml = self.export_scan(scan_id=latest_id)
+        latest_scan_xml = self.export_scan(scan_id=latest_scan_id)
 
         return latest_scan_xml
 
