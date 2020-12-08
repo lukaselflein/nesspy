@@ -27,7 +27,8 @@ class Scan:
             else:
                 raise ValueError('Empty Scan initiated.')
 
-        self.parse_xml()
+        self.hosts = self.parse_xml()
+
         self.header_list = None
         self.findings = self.hosts_to_table()
 
@@ -53,9 +54,14 @@ class Scan:
                             pass
                     scan_time = element[-2]
                     if host_ip is not None:
-                        fully_qualified_domain_name = hostname
-                        simple_hostname = fully_qualified_domain_name.split('.')[0]
-
+                        if hostname != host_ip:
+                            fully_qualified_domain_name = hostname
+                            simple_hostname = fully_qualified_domain_name.split('.')[0]
+                        else:
+                            fully_qualified_domain_name = host_ip
+                            simple_hostname = host_ip
+                            
+                       
                         host = Host(ip=host_ip, dns=simple_hostname)
                         host.fqdn = fully_qualified_domain_name
                         self.hosts += [host]
@@ -67,7 +73,7 @@ class Scan:
                         finding.scan_date = datetime.datetime.fromtimestamp(int(scan_time.text))
 
                         host.findings.add(finding)
-        self.hosts = set(self.hosts)
+        return set(self.hosts)
 
     def hosts_to_table(self):
         """Convert abstract host and finding objects into a table of strings."""
@@ -95,16 +101,37 @@ class Scan:
 
         return finding_table
 
-    def to_csv(self, path, *args, **kwargs):
-        """Export the DataFrame to a .csv file"""
+    def to_csv(self, path, header=False, *args, **kwargs):
+        """Export the vulnerabilities to a .csv file"""
         with open(path, 'w', newline='') as csvfile:
             exporter = csv.writer(csvfile, delimiter=',',
                                   quotechar='"', quoting=csv.QUOTE_MINIMAL)
             # Write 
-            exporter.writerow(self.header_list)
+            if header:
+               exporter.writerow(self.header_list)
             for row in self.finding_table:
                 exporter.writerow(row)
 
+
+    def to_log(self, path, *args, **kwargs):
+        """Export the vulnerabilities to a default log file.
+           Format is comma seperated like property=value, prob2=val2"""
+        with open(path, 'w', newline='') as logfile:
+            exporter = csv.writer(logfile, delimiter=',',
+                                  quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            for row in self.finding_table:
+                # Check if we actually have a label for each value
+                if len(self.header_list) != len(row):
+                    raise RuntimeError('Mismatch between labels and value row: ', row)
+ 
+                # Combine all vulnerability results with their label
+                zipped_row = []
+                for index in range(len(row)):
+                    zipped_string = str(self.header_list[index]) + "=" + str(row[index])
+                    zipped_row.append(zipped_string)
+                
+                # Write to csv like label1=val1, label2=val2, ...\n
+                exporter.writerow(zipped_row)
 
 class Host():
     """An asset/computer in a network. Has an IP-Address, DNS, and findings/vulnerabilities."""

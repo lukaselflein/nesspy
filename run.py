@@ -1,4 +1,6 @@
 import json
+import datetime
+import os 
 
 from nesspy.Connect import ConnectionManager
 from nesspy.Parser import Scan, Host, Finding
@@ -12,26 +14,52 @@ with open('config.json', 'r') as infile:
 # Communicate with the backend via the connection manager
 nessus = ConnectionManager(**config)
 
-# Show the scans saved in the backend
-scans = nessus.list_scans()
-print(scans)
+# List the scans saved in the backend
+scan_list = nessus.list_scans()
+print(scan_list)
 
-# Show the xml of a scan
-#xml_string = nessus.export_scan(5)
-#print(xml_string)
+# Find latest completed automatic scan by age
+scan_ages = [entry[2] if entry[-1] == 'completed'  # this excludes unfinished, running scans 
+                      # and 'auto' in entry[1].lower()  # naming convention, exclude manual scans
+                      else -1 
+                      for entry in scan_list] 
+print(scan_ages)
+max_entry_age = max(scan_ages)
+print(max_entry_age)
 
-# Get the xml of the latest scan
-xml_string = nessus.export_latest()
+# Select latest finished scan with "auto" in scan name
+for entry in scan_list:
+   if entry[2] == max_entry_age: 
+      latest_scan_id = entry[0]
+      latest_scan_name = entry[1]
+      break
+
+try:
+    int(latest_scan_id)
+except:
+    print('No Scan was found. Is nessus running?')
+    exit()
+
+# Export the scan as an xml string (in memory)
+xml_string = nessus.export_scan(latest_scan_id)
+
+# Logout
+nessus.logout()
 
 # Parse the scan
 scan = Scan(xml_string=xml_string)
 
-# Show findings from scan
-print(scan.findings[0:200])
-# Access the scan as a pandas DataFrame
-# Export the scan as a .csv table
-scan.to_csv(path="./example.csv")
+# Export the scan to csv
+date_time = datetime.datetime.fromtimestamp(max_entry_age)
+time_string = date_time.strftime("%Y-%m-%dT%H-%M-%S")
+out_file_name = latest_scan_name.lower().replace(" ", "-") + "_" +  time_string + ".csv"
+log_path = "./data"
+out_path = os.path.join(log_path, out_file_name)
+scan.to_csv(path=out_path, header=False)
+print(f'Successfully written "{latest_scan_name}" to {out_path} !')
 
-# Logout
-nessus.logout()
-print('Example script is done.')
+# Export scan to [label=value, ...] log format
+out_file_name = latest_scan_name.lower().replace(" ", "-") + "_" +  time_string + ".log"
+out_path = os.path.join(log_path, out_file_name)
+scan.to_log(path=out_path, header=False)
+print(f'Successfully written "{latest_scan_name}" to {out_path} !')
