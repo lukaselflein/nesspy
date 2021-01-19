@@ -19,17 +19,17 @@ scan_list = nessus.list_scans()
 print(scan_list)
 
 # Find latest completed automatic scan by age
-scan_ages = [entry[2] if entry[-1] == 'completed'  # this excludes unfinished, running scans 
-                      # and 'auto' in entry[1].lower()  # naming convention, exclude manual scans
-                      else -1 
-                      for entry in scan_list] 
-print(scan_ages)
-max_entry_age = max(scan_ages)
-print(max_entry_age)
+scan_times = [entry[2] if entry[-1] == 'completed'  # this excludes unfinished, running scans 
+                       # and 'auto' in entry[1].lower()  # naming convention, exclude manual scans
+                       else -1 
+                       for entry in scan_list] 
+print(scan_times)
+latest_scan_time = max(scan_times)
+print(latest_scan_time)
 
 # Select latest finished scan with "auto" in scan name
 for entry in scan_list:
-   if entry[2] == max_entry_age: 
+   if entry[2] == latest_scan_time: 
       latest_scan_id = entry[0]
       latest_scan_name = entry[1]
       break
@@ -37,7 +37,7 @@ for entry in scan_list:
 try:
     int(latest_scan_id)
 except:
-    print('No Scan was found. Is nessus running?')
+    print('No Scan was found. Is nessusd running?')
     exit()
 
 # Export the scan as an xml string (in memory)
@@ -50,7 +50,7 @@ nessus.logout()
 scan = Scan(xml_string=xml_string)
 
 # Export the scan to csv
-date_time = datetime.datetime.fromtimestamp(max_entry_age)
+date_time = datetime.datetime.fromtimestamp(latest_scan_time)
 time_string = date_time.strftime("%Y-%m-%dT%H-%M-%S")
 out_file_name = latest_scan_name.lower().replace(" ", "-") + "_" +  time_string + ".csv"
 log_path = "./data"
